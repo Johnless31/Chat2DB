@@ -29,7 +29,7 @@ public enum DriverTypeEnum {
     /**
      * Oracle
      */
-    ORACLE_DRIVER(DbTypeEnum.ORACLE, "oracle.jdbc.driver.OracleDriver", "ojdbc11.jar",""),
+    ORACLE_DRIVER(DbTypeEnum.ORACLE, "oracle.jdbc.driver.OracleDriver", "ojdbc8-19.3.0.0.jar,orai18n-19.3.0.0.jar",""),
 
     /**
      * SQLServer
@@ -65,12 +65,47 @@ public enum DriverTypeEnum {
     /**
      * DB2
      */
-    DB2_DRIVER(DbTypeEnum.DB2, "com.ibm.db2.jcc.DB2Driver", "",""),
+    DB2_DRIVER(DbTypeEnum.DB2, "com.ibm.db2.jcc.DB2Driver", "db2jcc4_4.26.14.jar",""),
 
     /**
      * MMARIADB
      */
-    MARIADB_DRIVER(DbTypeEnum.MARIADB, "org.mariadb.jdbc.Driver", "mariadb-java-client-3.0.8.jar","");
+    MARIADB_DRIVER(DbTypeEnum.MARIADB, "org.mariadb.jdbc.Driver", "mariadb-java-client-3.0.8.jar",""),
+
+
+
+    /**
+     * DM_DRIVER
+     */
+    DM_DRIVER(DbTypeEnum.DM, "dm.jdbc.driver.DmDriver", "DmJdbcDriver18-8.1.2.141.jar",""),
+
+
+    /**
+     * PRESTO_DRIVER
+     */
+    PRESTO_DRIVER(DbTypeEnum.PRESTO, "com.facebook.presto.jdbc.PrestoDriver", "presto-jdbc-0.245.1.jar",""),
+
+    /**
+     * KINGBASE_DRIVER
+     * com.kingbase8.Driver
+     */
+    KINGBASE_DRIVER(DbTypeEnum.KINGBASE, "com.kingbase8.Driver", "kingbase8-8.6.0.jar",""),
+
+    /**
+     * HIVE_DRIVER
+     * org.apache.hive.jdbc.HiveDriver
+     */
+    HIVE_DRIVER(DbTypeEnum.HIVE, "org.apache.hive.jdbc.HiveDriver", "hive-jdbc-3.1.2-standalone.jar",""),
+
+    /**
+     * REDIS_DRIVER
+     */
+    REDIS_DRIVER(DbTypeEnum.REDIS, "jdbc.RedisDriver", "redis-jdbc-driver-1.3.jar",""),
+    /**
+     * MONGODB_DRIVER
+     * com.dbschema.MongoJdbcDriver
+     */
+    MONGODB_DRIVER(DbTypeEnum.MONGODB, "com.dbschema.MongoJdbcDriver", "mongo-jdbc-standalone-1.18.jar","");
 
     final DbTypeEnum dbTypeEnum;
 

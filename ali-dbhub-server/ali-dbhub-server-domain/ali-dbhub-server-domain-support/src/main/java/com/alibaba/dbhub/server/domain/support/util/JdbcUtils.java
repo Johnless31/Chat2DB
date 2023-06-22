@@ -27,12 +27,14 @@ import com.alibaba.druid.DbType;
 
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * jdbc工具类
  *
  * @author Jiaju Zhuang
  */
+@Slf4j
 public class JdbcUtils {
 
     /**
@@ -45,7 +47,11 @@ public class JdbcUtils {
         if (dbType == null) {
             return null;
         }
-        return DbType.valueOf(dbType.getCode().toLowerCase());
+        try {
+            return DbType.valueOf(dbType.getCode().toLowerCase());
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**
@@ -143,7 +149,7 @@ public class JdbcUtils {
      */
     public static DataSourceConnect testConnect(String url, String host, String port,
         String userName, String password, DbTypeEnum dbType,
-        String jdbc, SSHInfo ssh, Map<String, String> properties) {
+        String jdbc, SSHInfo ssh, Map<String, Object> properties) {
         DataSourceConnect dataSourceConnect = DataSourceConnect.builder()
             .success(Boolean.TRUE)
             .build();
@@ -159,6 +165,7 @@ public class JdbcUtils {
             connection = IDriverManager.getConnection(url, userName, password,
                 DriverTypeEnum.getDriver(dbType, jdbc), properties);
         } catch (Exception e) {
+            log.error("connection fail:", e);
             dataSourceConnect.setSuccess(Boolean.FALSE);
             // 获取最后一个异常的信息给前端
             Throwable t = e;
@@ -174,7 +181,8 @@ public class JdbcUtils {
                 } catch (SQLException e) {
                     // ignore
                 }
-            }if(session!=null){
+            }
+            if (session != null) {
                 try {
                     session.delPortForwardingL(Integer.parseInt(ssh.getLocalPort()));
                 } catch (JSchException e) {
@@ -185,4 +193,5 @@ public class JdbcUtils {
         dataSourceConnect.setDescription("成功");
         return dataSourceConnect;
     }
+
 }

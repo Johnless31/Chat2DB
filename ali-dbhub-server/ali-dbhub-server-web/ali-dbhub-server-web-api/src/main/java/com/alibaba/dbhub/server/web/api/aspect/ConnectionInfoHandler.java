@@ -19,7 +19,6 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -34,11 +33,9 @@ public class ConnectionInfoHandler {
     @Autowired
     private DataSourceService dataSourceService;
 
-    @Value("${jdbc.jar.download.url}")
-    private String jdbcJarDownLoadUrl;
 
     @Around("within(@com.alibaba.dbhub.server.web.api.aspect.ConnectionInfoAspect *)")
-    public Object businessExceptionHandler(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
+    public Object connectionInfoHandler(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
         try {
             Object[] params = proceedingJoinPoint.getArgs();
             if (params != null && params.length > 0) {

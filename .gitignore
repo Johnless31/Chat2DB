@@ -14,6 +14,8 @@
 
 ### Visual Studio Code ###
 .vscode
+package-lock.json
+yarn.lock
 
 ### Mac
 .DS_Store
@@ -21,6 +23,8 @@
 
 ### docker 数据不用上传
 /docker/redis/data/*
+/docker/test/reds/*
+/docker/test/mongodb/*
 /ali-dbhub-server/ali-dbhub-server-domain/ali-dbhub-server-domain-support/src/main/resources/lib/*
 /ali-dbhub-server/ali-dbhub-server-domain/ali-dbhub-server-domain-support/lib/*
 /lib

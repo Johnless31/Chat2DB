@@ -6,10 +6,14 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
+import com.alibaba.dbhub.server.domain.api.enums.AiSqlSourceEnum;
+import com.alibaba.dbhub.server.domain.api.model.Config;
 import com.alibaba.dbhub.server.domain.api.model.DataSource;
 import com.alibaba.dbhub.server.domain.api.param.TableQueryParam;
+import com.alibaba.dbhub.server.domain.api.service.ConfigService;
 import com.alibaba.dbhub.server.domain.api.service.DataSourceService;
 import com.alibaba.dbhub.server.domain.api.service.TableService;
 import com.alibaba.dbhub.server.domain.support.enums.DbTypeEnum;
@@ -24,7 +28,11 @@ import com.alibaba.dbhub.server.web.api.controller.ai.converter.ChatConverter;
 import com.alibaba.dbhub.server.web.api.controller.ai.enums.GptVersionType;
 import com.alibaba.dbhub.server.web.api.controller.ai.enums.PromptType;
 import com.alibaba.dbhub.server.web.api.controller.ai.listener.OpenAIEventSourceListener;
+import com.alibaba.dbhub.server.web.api.controller.ai.listener.RestAIEventSourceListener;
 import com.alibaba.dbhub.server.web.api.controller.ai.request.ChatQueryRequest;
+import com.alibaba.dbhub.server.web.api.controller.ai.request.ChatRequest;
+import com.alibaba.dbhub.server.web.api.controller.ai.rest.client.RestAIClient;
+import com.alibaba.dbhub.server.web.api.util.ApplicationContextUtil;
 import com.alibaba.dbhub.server.web.api.util.OpenAIClient;
 
 import cn.hutool.core.util.StrUtil;
@@ -42,6 +50,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -95,6 +105,63 @@ public class ChatController {
      */
     private Integer RETURN_TOKEN_LENGTH = 150;
 
+
+    /**
+     * 自定义模型流式输出接口DEMO
+     * <p>
+     *     Note:使用自己本地的流式输出的自定义AI，接口输入和输出需与该样例保持一致
+     * </p>
+     *
+     * @param queryRequest
+     * @return
+     * @throws IOException
+     */
+    @PostMapping("/custom/stream/chat")
+    @CrossOrigin
+    public SseEmitter customChat(@RequestBody ChatRequest queryRequest) throws IOException {
+        SseEmitter emitter = new SseEmitter(CHAT_TIMEOUT);
+
+        // 设置 SSEEmitter 的事件处理程序
+        emitter.onCompletion(() -> log.info(LocalDateTime.now() + ", on completion"));
+        emitter.onTimeout(() -> {
+            log.info(LocalDateTime.now() + ", uid# on timeout");
+            emitter.complete();
+        });
+
+        // 启动一个新的线程来生成 SSE 事件
+        new Thread(() -> {
+            try {
+                for (int i = 0; i < 10; i++) {
+                    emitter.send(SseEmitter.event().name("message").data("Event " + i));
+                    Thread.sleep(1000);
+                }
+            } catch (Exception e) {
+                emitter.completeWithError(e);
+            } finally {
+                emitter.complete();
+            }
+        }).start();
+
+        return emitter;
+    }
+
+    /**
+     * 自定义模型非流式输出接口DEMO
+     * <p>
+     *     Note:使用自己本地的飞流式输出自定义AI，接口输入和输出需与该样例保持一致
+     * </p>
+     *
+     * @param queryRequest
+     * @return
+     * @throws IOException
+     */
+    @PostMapping("/custom/non/stream/chat")
+    @CrossOrigin
+    public String customNonStreamChat(@RequestBody ChatRequest queryRequest) throws IOException {
+        String data = "自定义AI样例接口连接成功！！！！";
+        return data;
+    }
+
     /**
      * 问答对话模型
      *
@@ -108,26 +175,15 @@ public class ChatController {
     public SseEmitter chat(@RequestParam("message") String msg, @RequestHeader Map<String, String> headers)
         throws IOException {
         //默认30秒超时,设置为0L则永不超时
-        SseEmitter sseEmitter = new SseEmitter(0L);
+        SseEmitter sseEmitter = new SseEmitter(CHAT_TIMEOUT);
         String uid = headers.get("uid");
         if (StrUtil.isBlank(uid)) {
             throw new BaseException(CommonError.SYS_ERROR);
         }
-        String messageContext = (String)LocalCache.CACHE.get(uid);
-        List<Message> messages = new ArrayList<>();
-        if (StrUtil.isNotBlank(messageContext)) {
-            messages = JSONUtil.toList(messageContext, Message.class);
-            if (messages.size() >= contextLength) {
-                messages = messages.subList(1, contextLength);
-            }
-            Message currentMessage = Message.builder().content(msg).role(Message.Role.USER).build();
-            messages.add(currentMessage);
-        } else {
-            Message currentMessage = Message.builder().content(msg).role(Message.Role.USER).build();
-            messages.add(currentMessage);
+        if (useOpenAI()) {
+            return chatWithOpenAi(msg, sseEmitter, uid);
         }
-
-        return chatGpt35(messages, sseEmitter, uid);
+        return chatWithRestAi(msg, sseEmitter);
     }
 
     /**
@@ -154,6 +210,50 @@ public class ChatController {
             throw new BusinessException(CommonErrorEnum.PARAM_ERROR);
         }
 
+        if (useOpenAI()) {
+            return chatWithOpenAiSql(queryRequest, sseEmitter, uid);
+        }
+        return chatWithRestAi(queryRequest.getMessage(), sseEmitter);
+    }
+
+    /**
+     * 是否使用OPENAI
+     *
+     * @return
+     */
+    private Boolean useOpenAI() {
+        ConfigService configService = ApplicationContextUtil.getBean(ConfigService.class);
+        Config config = configService.find(RestAIClient.AI_SQL_SOURCE).getData();
+        if (Objects.nonNull(config) && AiSqlSourceEnum.RESTAI.getCode().equals(config.getContent())) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * 使用自定义AI接口进行聊天
+     *
+     * @param prompt
+     * @param sseEmitter
+     * @return
+     */
+    private SseEmitter chatWithRestAi(String prompt, SseEmitter sseEmitter) {
+        RestAIEventSourceListener eventSourceListener = new RestAIEventSourceListener(sseEmitter);
+        RestAIClient.getInstance().restCompletions(prompt, eventSourceListener);
+        return sseEmitter;
+    }
+
+    /**
+     * 使用OPENAI SQL接口
+     *
+     * @param queryRequest
+     * @param sseEmitter
+     * @param uid
+     * @return
+     * @throws IOException
+     */
+    private SseEmitter chatWithOpenAiSql(ChatQueryRequest queryRequest, SseEmitter sseEmitter, String uid)
+        throws IOException {
         String prompt = buildPrompt(queryRequest);
         if (prompt.length() / TOKEN_CONVERT_CHAR_LENGTH > MAX_PROMPT_LENGTH) {
             log.error("提示语超出最大长度:{}，输入长度:{}, 请重新输入", MAX_PROMPT_LENGTH,
@@ -176,6 +276,33 @@ public class ChatController {
                 break;
         }
         return chatGpt3(prompt, sseEmitter, uid);
+    }
+
+    /**
+     * 使用OPENAI聊天相关接口
+     *
+     * @param msg
+     * @param sseEmitter
+     * @param uid
+     * @return
+     * @throws IOException
+     */
+    private SseEmitter chatWithOpenAi(String msg, SseEmitter sseEmitter, String uid) throws IOException {
+        String messageContext = (String)LocalCache.CACHE.get(uid);
+        List<Message> messages = new ArrayList<>();
+        if (StrUtil.isNotBlank(messageContext)) {
+            messages = JSONUtil.toList(messageContext, Message.class);
+            if (messages.size() >= contextLength) {
+                messages = messages.subList(1, contextLength);
+            }
+            Message currentMessage = Message.builder().content(msg).role(Message.Role.USER).build();
+            messages.add(currentMessage);
+        } else {
+            Message currentMessage = Message.builder().content(msg).role(Message.Role.USER).build();
+            messages.add(currentMessage);
+        }
+
+        return chatGpt35(messages, sseEmitter, uid);
     }
 
     /**
